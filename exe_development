@@ -1,0 +1,542 @@
+Yes. Since you want a fully white-labeled, customized enterprise build, I would structure the whole process as a source → development environment → customization → build → packaging → validation → signed release pipeline.
+
+One important correction from earlier: the current Hermes repository says its recommended contributor workflow is actually to use the standard installer to create the managed checkout and then work from that checkout; it also provides a manual clone/venv path. Since you specifically want maximum control over your customized fork, the manual path is reasonable. 
+
+1. Create your private fork
+
+Fork/clone the upstream repository:
+
+git clone --recurse-submodules https://github.com/NousResearch/hermes-agent.git
+cd hermes-agent
+
+Then create your own private repository and push your customized branch there.
+
+Upstream Hermes
+      ↓
+Your private fork
+      ↓
+Your Enterprise Hermes
+
+
+---
+
+2. Install the development prerequisites
+
+Install only the tools needed for your build machine:
+
+Git
+uv
+Node.js
+
+Hermes currently uses Python 3.11 for its development environment, and its repository includes Node workspaces/components. 
+
+You do not run:
+
+iex (irm https://hermes-agent.nousresearch.com/install.ps1)
+
+for this workflow.
+
+
+---
+
+3. Create a separate development venv
+
+Hermes specifically recommends keeping the development venv outside the source checkout. 
+
+For example:
+
+uv venv C:\EnterpriseHermes\venvs\dev --python 3.11
+
+Activate it:
+
+C:\EnterpriseHermes\venvs\dev\Scripts\activate
+
+
+---
+
+4. Install Hermes into that development environment
+
+From your cloned repository:
+
+uv pip install -e ".[all,dev]"
+
+This is an editable development installation.
+
+Meaning:
+
+Your source code
+       ↓
+Development venv
+       ↓
+Hermes
+
+When you modify the source, the development environment sees your changes.
+
+Hermes' current contributor documentation uses this same uv pip install -e ".[all,dev]" approach. 
+
+
+---
+
+5. Install the Node dependencies
+
+From the repository:
+
+npm install
+
+The current repository uses npm workspaces and includes Node-based components such as the browser tooling/TUI/web/desktop workspaces. 
+
+
+---
+
+6. Now do your white-label customization
+
+This is where you make it your product.
+
+Branding
+
+Change:
+
+Hermes
+Nous Research
+hermes
+Hermes Agent
+
+where appropriate to your product identity.
+
+For example:
+
+Hermes Agent
+       ↓
+Acme AI Agent
+
+and:
+
+hermes
+       ↓
+acme-agent
+
+CLI
+
+Instead of:
+
+hermes --help
+
+your final CLI can become:
+
+acme-agent --help
+
+Paths
+
+Change application/config/data paths where appropriate:
+
+~/.hermes
+
+to your own application namespace.
+
+UI/TUI/Desktop
+
+Change:
+
+Product name
+
+Logo
+
+Icons
+
+Titles
+
+About screen
+
+Version information
+
+Startup messages
+
+Help text
+
+Documentation links
+
+URLs
+
+Error messages where they expose branding
+
+
+
+---
+
+7. Modify the functionality
+
+Now make your actual product changes:
+
+Core Agent
+   │
+   ├── Guardrails
+   ├── Security controls
+   ├── Custom behavior
+   └── Enterprise configuration
+
+Skills
+   │
+   ├── Remove unwanted skills
+   ├── Modify existing skills
+   └── Add your own skills
+
+Tools
+   │
+   ├── Add/remove tools
+   └── Modify tool behavior
+
+Don't modify the installed venv for these changes.
+
+Modify the source repository.
+
+
+---
+
+8. Lock your dependencies
+
+Once your customized version works, lock the dependency state.
+
+Hermes' development guidance recommends maintaining dependency bounds and regenerating uv.lock when dependencies change. 
+
+Conceptually:
+
+pyproject.toml
+      +
+uv.lock
+      ↓
+Exact reproducible build
+
+This is important for enterprise releases because you don't want:
+
+Build 1 → dependency version X
+Build 2 → dependency version Y
+
+without intentionally changing your product.
+
+
+---
+
+9. Test the customized Hermes
+
+Run the project's tests:
+
+scripts\run_tests.sh
+
+On Windows, use the appropriate test invocation if the shell script isn't directly usable.
+
+Also test:
+
+CLI
+Agent execution
+Tools
+Skills
+LLM providers
+Memory
+Scheduling
+Gateway
+TUI/Desktop components you retain
+
+And run:
+
+your-agent doctor
+
+after you have renamed the CLI.
+
+
+---
+
+10. Create a clean build environment
+
+This is a very important step.
+
+Don't package your messy development machine.
+
+Create a clean build machine/environment:
+
+Clean Windows Build Machine
+│
+├── Git
+├── Python/build tooling
+├── uv
+├── Node build tooling
+└── Your private source
+
+Then:
+
+git checkout <release-commit>
+uv sync
+npm ci
+
+Build from that exact source commit.
+
+
+---
+
+11. Build the Python application
+
+Now package your customized Python application.
+
+The conceptual transformation is:
+
+Your Python source
+       +
+Python 3.11 runtime
+       +
+Python dependencies
+       ↓
+Python application binary/package
+
+You can evaluate:
+
+Nuitka
+
+Source
+  ↓
+Nuitka
+  ↓
+Native executable + dependencies
+
+PyInstaller
+
+Source
+  ↓
+PyInstaller
+  ↓
+Executable + embedded Python + dependencies
+
+For a serious enterprise product, I would benchmark both on Hermes rather than deciding purely theoretically, because Hermes has a fairly large and dynamic dependency/tool surface.
+
+
+---
+
+12. Bundle Node.js
+
+Do not make your final product depend on:
+
+User's Node.js
+
+Instead:
+
+YourProduct/
+    runtime/
+        node/
+            node.exe
+
+Your application launches that specific Node executable when Node functionality is required.
+
+The current Hermes repository declares Node >=20, while the official installer currently provisions Node 22. 
+
+For your enterprise build, pin the exact Node version you test and ship.
+
+
+---
+
+13. Bundle other required runtimes
+
+Depending on which Hermes functionality you retain, package the required supporting binaries/resources too.
+
+The official Hermes installer currently handles dependencies including:
+
+Python
+Node.js
+ripgrep
+ffmpeg
+
+automatically. 
+
+Your enterprise package should therefore deliberately account for every runtime dependency rather than assuming the customer's machine has it.
+
+
+---
+
+14. Create your final application layout
+
+For example:
+
+AcmeAgent/
+│
+├── AcmeAgent.exe
+│
+├── runtime/
+│   ├── node/
+│   │   └── node.exe
+│   │
+│   ├── ffmpeg/
+│   └── ripgrep/
+│
+├── resources/
+│
+├── skills/
+│
+├── templates/
+│
+└── config/
+
+The exact layout depends on what you package versus keep external.
+
+
+---
+
+15. Create the Windows installer
+
+Instead of giving users a ZIP containing your development environment, create:
+
+AcmeAgentSetup.exe
+
+The installer should:
+
+Install
+  ↓
+Application files
+  ↓
+Private runtimes
+  ↓
+Required resources
+  ↓
+Shortcuts
+  ↓
+File associations/configuration if required
+  ↓
+Your CLI
+
+
+---
+
+16. Test on a completely clean machine
+
+This is your most important deployment test.
+
+Create a Windows VM with:
+
+Python       ❌
+Node.js      ❌
+uv           ❌
+Hermes       ❌
+Git          ❌
+ffmpeg       ❌
+ripgrep      ❌
+
+Install only:
+
+AcmeAgentSetup.exe
+
+Then verify:
+
+AcmeAgent.exe
+AcmeAgent --help
+AcmeAgent
+
+and every functionality you intend to ship.
+
+If it works there, you have demonstrated that your package is genuinely self-contained.
+
+
+---
+
+17. Security/enterprise validation
+
+Before release:
+
+Source
+ ↓
+SAST
+ ↓
+Dependency/CVE scan
+ ↓
+Secret scanning
+ ↓
+License scanning
+ ↓
+Malware scanning
+ ↓
+SBOM
+ ↓
+Build
+ ↓
+Binary scanning
+ ↓
+Code signing
+
+Also maintain a record of the exact:
+
+Git commit
+Python version
+Python dependency versions
+Node version
+Node dependency versions
+Other bundled binaries
+Build tool version
+
+
+---
+
+18. Sign the final installer
+
+Finally:
+
+AcmeAgentSetup.exe
+        ↓
+Code signing certificate
+        ↓
+Signed enterprise installer
+
+Then distribute that signed artifact.
+
+
+---
+
+The complete picture
+
+UPSTREAM
+                    │
+                    ▼
+             Hermes Git repo
+                    │
+                    ▼
+            Your private fork
+                    │
+                    ▼
+        ┌─────────────────────┐
+        │ Development venv    │
+        │ Python 3.11         │
+        │ Hermes dependencies │
+        └──────────┬──────────┘
+                   │
+                   ▼
+          WHITE-LABEL / MODIFY
+                   │
+          ┌────────┼─────────┐
+          ▼        ▼         ▼
+       Branding  Guardrails  Skills
+          │        │         │
+          └────────┼─────────┘
+                   ▼
+                TEST
+                   │
+                   ▼
+          LOCK DEPENDENCIES
+                   │
+                   ▼
+             CLEAN BUILD
+                   │
+          ┌────────┴─────────┐
+          ▼                  ▼
+     Python runtime       Node runtime
+     + dependencies       + dependencies
+          │                  │
+          └────────┬─────────┘
+                   ▼
+            PACKAGE/BUNDLE
+                   │
+                   ▼
+          AcmeAgentSetup.exe
+                   │
+                   ▼
+             CODE SIGNING
+                   │
+                   ▼
+          ENTERPRISE RELEASE
+
+One thing you should not overlook: the repository is MIT-licensed, but the repo also contains individual skills/components with their own licensing/attribution requirements. For example, one bundled PowerPoint skill has an Anthropic-specific license. So before redistributing a white-labeled build, audit every retained skill/resource, not just the top-level Hermes MIT license. 
+
+Also, because Hermes is actively changing, I would pin a specific upstream commit/tag for your first enterprise release rather than building directly from main.
